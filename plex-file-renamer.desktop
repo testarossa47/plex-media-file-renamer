@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Plex File Renamer
+Comment=Rename video files for Plex Media Server
+Exec=/home/fabio/Datadrive/FileRenamer/file_renamer.py
+Icon=video-x-generic
+Terminal=false
+Categories=AudioVideo;Utility;GTK;
+Keywords=plex;video;rename;media;
+StartupNotify=true
