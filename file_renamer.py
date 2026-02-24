@@ -190,8 +190,8 @@ class FileRenamer(Gtk.Window):
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
 
-        # ListStore: original_name, arrow, new_name, full_path
-        self.preview_store = Gtk.ListStore(str, str, str, str)
+        # ListStore: original_name, arrow, new_name, full_path, fg_color
+        self.preview_store = Gtk.ListStore(str, str, str, str, str)
 
         tree_view = Gtk.TreeView(model=self.preview_store)
         tree_view.set_headers_visible(True)
@@ -207,10 +207,9 @@ class FileRenamer(Gtk.Window):
         column = Gtk.TreeViewColumn("", renderer, text=1)
         tree_view.append_column(column)
 
-        # New filename
+        # New filename - foreground color bound to column 4
         renderer = Gtk.CellRendererText()
-        renderer.set_property("foreground", "#4A90D9")
-        column = Gtk.TreeViewColumn("New Name", renderer, text=2)
+        column = Gtk.TreeViewColumn("New Name", renderer, text=2, foreground=4)
         column.set_expand(True)
         tree_view.append_column(column)
 
@@ -328,29 +327,67 @@ class FileRenamer(Gtk.Window):
         elif sort_by == "name":
             self.files.sort(key=lambda f: os.path.basename(f).lower())
 
+    def _build_rename_plan(self):
+        """Build the rename plan: list of (src_path, dst_path)"""
+        series_name = self.series_entry.get_text().strip()
+        season = int(self.season_spin.get_value())
+        start_episode = int(self.episode_spin.get_value())
+        target_ext = self.target_ext_entry.get_text().strip()
+        if not target_ext.startswith('.'):
+            target_ext = '.' + target_ext
+
+        plan = []
+        for idx, file_path in enumerate(self.files):
+            episode_num = start_episode + idx
+            new_name = f"{series_name} - S{season:02d}E{episode_num:02d}{target_ext}"
+            new_path = os.path.join(os.path.dirname(file_path), new_name)
+            plan.append((file_path, new_path))
+        return plan
+
+    def _detect_collisions(self, plan):
+        """Detect naming collisions in a rename plan.
+
+        Returns a dict of {dst_path: reason} for each collision:
+        - "file already exists": dst exists on disk and isn't being renamed away
+        - "duplicate target name": multiple source files share the same dst
+        """
+        src_set = {src for src, dst in plan}
+
+        dst_counts = {}
+        for src, dst in plan:
+            dst_counts[dst] = dst_counts.get(dst, 0) + 1
+
+        collisions = {}
+        for src, dst in plan:
+            if dst_counts[dst] > 1:
+                collisions[dst] = "duplicate target name"
+            elif dst != src and os.path.exists(dst) and dst not in src_set:
+                collisions[dst] = "file already exists"
+        return collisions
+
     def update_preview(self):
         """Update the preview list"""
         self.preview_store.clear()
 
         series_name = self.series_entry.get_text().strip()
-        season = int(self.season_spin.get_value())
-        start_episode = int(self.episode_spin.get_value())
-        target_ext = self.target_ext_entry.get_text().strip()
-
-        if not target_ext.startswith('.'):
-            target_ext = '.' + target_ext
 
         if not series_name or not self.files:
             self.rename_button.set_sensitive(False)
             return
 
-        # Generate preview
-        for idx, file_path in enumerate(self.files):
-            episode_num = start_episode + idx
-            original_name = os.path.basename(file_path)
-            new_name = f"{series_name} - S{season:02d}E{episode_num:02d}{target_ext}"
+        plan = self._build_rename_plan()
+        collisions = self._detect_collisions(plan)
 
-            self.preview_store.append([original_name, "→", new_name, file_path])
+        for src, dst in plan:
+            original_name = os.path.basename(src)
+            new_name = os.path.basename(dst)
+            if dst in collisions:
+                arrow = "⚠ →"
+                fg_color = "#CC0000"
+            else:
+                arrow = "→"
+                fg_color = "#4A90D9"
+            self.preview_store.append([original_name, arrow, new_name, src, fg_color])
 
         self.rename_button.set_sensitive(True)
 
@@ -421,13 +458,45 @@ class FileRenamer(Gtk.Window):
 
     def perform_rename(self):
         """Perform the actual file renaming"""
-        series_name = self.series_entry.get_text().strip()
-        season = int(self.season_spin.get_value())
-        start_episode = int(self.episode_spin.get_value())
-        target_ext = self.target_ext_entry.get_text().strip()
+        plan = self._build_rename_plan()
+        collisions = self._detect_collisions(plan)
 
-        if not target_ext.startswith('.'):
-            target_ext = '.' + target_ext
+        if collisions:
+            # Build a human-readable list of collision details
+            lines = []
+            for dst, reason in collisions.items():
+                lines.append(f"• {os.path.basename(dst)} ({reason})")
+                if len(lines) == 10:
+                    remaining = len(collisions) - 10
+                    if remaining:
+                        lines.append(f"  … and {remaining} more")
+                    break
+
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.NONE,
+                text="Filename Collisions Detected"
+            )
+            dialog.format_secondary_text(
+                "The following target filenames have conflicts:\n\n" +
+                "\n".join(lines) +
+                "\n\nHow would you like to proceed?"
+            )
+            dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            dialog.add_button("Skip Conflicts", Gtk.ResponseType.NO)
+            dialog.add_button("Overwrite", Gtk.ResponseType.YES)
+            dialog.set_default_response(Gtk.ResponseType.CANCEL)
+
+            response = dialog.run()
+            dialog.destroy()
+
+            if response in (Gtk.ResponseType.CANCEL, Gtk.ResponseType.DELETE_EVENT):
+                return
+            elif response == Gtk.ResponseType.NO:
+                # Remove conflicting entries from the plan
+                plan = [(src, dst) for src, dst in plan if dst not in collisions]
 
         success_count = 0
         errors = []
@@ -435,18 +504,13 @@ class FileRenamer(Gtk.Window):
         # Clear previous undo history and prepare new one
         self.last_rename_operation = []
 
-        for idx, file_path in enumerate(self.files):
-            episode_num = start_episode + idx
-            new_name = f"{series_name} - S{season:02d}E{episode_num:02d}{target_ext}"
-            new_path = os.path.join(os.path.dirname(file_path), new_name)
-
+        for src, dst in plan:
             try:
-                os.rename(file_path, new_path)
-                # Store the rename operation for undo (old_path, new_path)
-                self.last_rename_operation.append((file_path, new_path))
+                os.rename(src, dst)
+                self.last_rename_operation.append((src, dst))
                 success_count += 1
             except Exception as e:
-                errors.append(f"{os.path.basename(file_path)}: {e}")
+                errors.append(f"{os.path.basename(src)}: {e}")
 
         # Enable undo button if any files were successfully renamed
         if success_count > 0:
