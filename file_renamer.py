@@ -130,7 +130,8 @@ class FileRenamer(Gtk.Window):
         ext_box.pack_start(self.source_ext_entry, False, False, 0)
 
         # All files checkbox
-        self.all_files_check = Gtk.CheckButton(label="All files")
+        self.all_files_check = Gtk.CheckButton(label="All extensions")
+        self.all_files_check.set_tooltip_text("Match files regardless of extension")
         self.all_files_check.set_active(self.settings.get("all_files", False))
         self.all_files_check.connect("toggled", self.on_all_files_toggled)
         ext_box.pack_start(self.all_files_check, False, False, 0)
@@ -234,6 +235,7 @@ class FileRenamer(Gtk.Window):
         # Rename button
         self.rename_button = Gtk.Button(label="Rename Files")
         self.rename_button.set_sensitive(False)
+        self.rename_button.set_tooltip_text("Enter a series name and load files to enable renaming")
         self.rename_button.get_style_context().add_class("suggested-action")
         self.rename_button.connect("clicked", self.on_rename_clicked)
         button_box.pack_start(self.rename_button, False, False, 0)
