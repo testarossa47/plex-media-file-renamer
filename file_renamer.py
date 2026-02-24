@@ -9,8 +9,6 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 import os
 import json
-from pathlib import Path
-from datetime import datetime
 
 CONFIG_FILE = os.path.expanduser("~/.config/plex-file-renamer/settings.json")
 
