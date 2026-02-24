@@ -52,11 +52,11 @@ class FileRenamer(Gtk.Window):
         paned.set_position(300)
 
         # File list
-        file_frame = Gtk.Frame(label="Files to Rename")
-        file_frame.set_shadow_type(Gtk.ShadowType.IN)
+        self.file_frame = Gtk.Frame(label="Files to Rename")
+        self.file_frame.set_shadow_type(Gtk.ShadowType.IN)
         self.file_list = self.create_file_list()
-        file_frame.add(self.file_list)
-        paned.add1(file_frame)
+        self.file_frame.add(self.file_list)
+        paned.add1(self.file_frame)
 
         # Preview list
         preview_frame = Gtk.Frame(label="Preview")
@@ -296,7 +296,9 @@ class FileRenamer(Gtk.Window):
         # Sort files
         self.sort_files()
 
-        # Update file list
+        # Update file list and frame label
+        count = len(self.files)
+        self.file_frame.set_label(f"Files to Rename ({count} file{'s' if count != 1 else ''})")
         for file_path in self.files:
             self.file_store.append([os.path.basename(file_path), file_path])
 
