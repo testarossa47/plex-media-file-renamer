@@ -26,6 +26,10 @@ mkdir -p "${PKG_DIR}/DEBIAN"
 mkdir -p "${PKG_DIR}/usr/bin"
 mkdir -p "${PKG_DIR}/usr/share/applications"
 mkdir -p "${PKG_DIR}/usr/share/doc/${PKG_NAME}"
+mkdir -p "${PKG_DIR}/usr/share/icons/hicolor/scalable/apps"
+for sz in 16 22 24 32 48 64 128 256 512; do
+    mkdir -p "${PKG_DIR}/usr/share/icons/hicolor/${sz}x${sz}/apps"
+done
 
 # ── Install the application script ─────────────────────────────
 cp "${PROJECT_DIR}/file_renamer.py" "${PKG_DIR}/usr/bin/${PKG_NAME}"
@@ -35,6 +39,22 @@ chmod 755 "${PKG_DIR}/usr/bin/${PKG_NAME}"
 cp "${PROJECT_DIR}/plex-file-renamer.desktop" "${PKG_DIR}/usr/share/applications/${PKG_NAME}.desktop"
 chmod 644 "${PKG_DIR}/usr/share/applications/${PKG_NAME}.desktop"
 
+# ── Generate and install icons ────────────────────────────────
+echo "Generating icons..."
+python3 "${SCRIPT_DIR}/generate-icons.py"
+
+# SVG (scalable)
+cp "${PROJECT_DIR}/icons/${PKG_NAME}.svg" \
+   "${PKG_DIR}/usr/share/icons/hicolor/scalable/apps/${PKG_NAME}.svg"
+chmod 644 "${PKG_DIR}/usr/share/icons/hicolor/scalable/apps/${PKG_NAME}.svg"
+
+# PNGs at each size
+for sz in 16 22 24 32 48 64 128 256 512; do
+    cp "${PROJECT_DIR}/icons/${PKG_NAME}-${sz}.png" \
+       "${PKG_DIR}/usr/share/icons/hicolor/${sz}x${sz}/apps/${PKG_NAME}.png"
+    chmod 644 "${PKG_DIR}/usr/share/icons/hicolor/${sz}x${sz}/apps/${PKG_NAME}.png"
+done
+
 # ── Install documentation ─────────────────────────────────────
 cp "${PROJECT_DIR}/README.md" "${PKG_DIR}/usr/share/doc/${PKG_NAME}/"
 cp "${SCRIPT_DIR}/copyright" "${PKG_DIR}/usr/share/doc/${PKG_NAME}/"
@@ -42,6 +62,19 @@ chmod 644 "${PKG_DIR}/usr/share/doc/${PKG_NAME}/"*
 
 # ── Calculate installed size (in KB) ──────────────────────────
 INSTALLED_SIZE=$(du -sk "${PKG_DIR}" | cut -f1)
+
+# ── Write DEBIAN/postinst (refresh icon + desktop caches) ─────
+cat > "${PKG_DIR}/DEBIAN/postinst" << 'POSTINST'
+#!/bin/sh
+set -e
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+fi
+POSTINST
+chmod 755 "${PKG_DIR}/DEBIAN/postinst"
 
 # ── Write DEBIAN/control ──────────────────────────────────────
 cat > "${PKG_DIR}/DEBIAN/control" << EOF

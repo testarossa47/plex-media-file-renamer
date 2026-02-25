@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+
+  <!-- Background: dark navy rounded square -->
+  <rect width="512" height="512" rx="88" ry="88" fill="#16162a"/>
+
+  <!-- Film strip: left sprocket column -->
+  <rect x="0" y="178" width="78" height="156" fill="#b87800"/>
+  <!-- Left sprocket holes -->
+  <circle cx="39" cy="222" r="18" fill="#16162a"/>
+  <circle cx="39" cy="256" r="18" fill="#16162a"/>
+  <circle cx="39" cy="290" r="18" fill="#16162a"/>
+
+  <!-- Film strip: right sprocket column -->
+  <rect x="434" y="178" width="78" height="156" fill="#b87800"/>
+  <!-- Right sprocket holes -->
+  <circle cx="473" cy="222" r="18" fill="#16162a"/>
+  <circle cx="473" cy="256" r="18" fill="#16162a"/>
+  <circle cx="473" cy="290" r="18" fill="#16162a"/>
+
+  <!-- Center frame (dark) -->
+  <rect x="78" y="178" width="356" height="156" fill="#0c0c1c"/>
+  <!-- Top rail -->
+  <rect x="78" y="178" width="356" height="6" fill="#E5A00D"/>
+  <!-- Bottom rail -->
+  <rect x="78" y="328" width="356" height="6" fill="#E5A00D"/>
+
+  <!-- Play triangle -->
+  <polygon points="196,208 196,304 306,256" fill="white"/>
+
+  <!-- Pencil: defined pointing up, rotated 135° CW → points lower-right -->
+  <g transform="translate(392,392) rotate(135)">
+    <!-- Eraser -->
+    <rect x="-13" y="-82" width="26" height="20" rx="4" fill="#e86464"/>
+    <!-- Metal band -->
+    <rect x="-13" y="-62" width="26" height="12" fill="#b4b4b4"/>
+    <!-- Body -->
+    <rect x="-13" y="-50" width="26" height="84" fill="#ffd23c"/>
+    <!-- Wood tip -->
+    <polygon points="-13,34 13,34 0,62" fill="#f0c870"/>
+    <!-- Graphite -->
+    <polygon points="-5,50 5,50 0,62" fill="#3c3c3c"/>
+  </g>
+
+</svg>
