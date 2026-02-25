@@ -39,10 +39,7 @@ chmod 755 "${PKG_DIR}/usr/bin/${PKG_NAME}"
 cp "${PROJECT_DIR}/plex-file-renamer.desktop" "${PKG_DIR}/usr/share/applications/${PKG_NAME}.desktop"
 chmod 644 "${PKG_DIR}/usr/share/applications/${PKG_NAME}.desktop"
 
-# ── Generate and install icons ────────────────────────────────
-echo "Generating icons..."
-python3 "${SCRIPT_DIR}/generate-icons.py"
-
+# ── Install icons ─────────────────────────────────────────────
 # SVG (scalable)
 cp "${PROJECT_DIR}/icons/${PKG_NAME}.svg" \
    "${PKG_DIR}/usr/share/icons/hicolor/scalable/apps/${PKG_NAME}.svg"
