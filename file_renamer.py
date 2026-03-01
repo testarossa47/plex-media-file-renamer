@@ -18,7 +18,8 @@ class FileRenamer(Gtk.Window):
         self.set_default_size(900, 600)
         self.set_border_width(10)
 
-        # Load settings
+        # Load settings (sets self.settings_load_error if config is corrupted)
+        self.settings_load_error = None
         self.settings = self.load_settings()
 
         # Current state
@@ -33,6 +34,10 @@ class FileRenamer(Gtk.Window):
 
         # Apply Nemo-like styling
         self.apply_styling()
+
+        # Show warning after UI is ready if settings failed to load
+        if self.settings_load_error:
+            GLib.idle_add(self._show_settings_load_warning)
 
     def build_ui(self):
         """Build the main user interface"""
@@ -105,7 +110,7 @@ class FileRenamer(Gtk.Window):
         # Season Number
         grid.attach(Gtk.Label(label="Season:", xalign=1), 2, row, 1, 1)
         season_adj = Gtk.Adjustment(value=self.settings.get("season", 1),
-                                     lower=1, upper=99, step_increment=1)
+                                     lower=0, upper=99, step_increment=1)
         self.season_spin = Gtk.SpinButton(adjustment=season_adj, digits=0)
         self.season_spin.connect("value-changed", self.on_config_changed)
         grid.attach(self.season_spin, 3, row, 1, 1)
@@ -280,6 +285,12 @@ class FileRenamer(Gtk.Window):
         if not source_ext.startswith('.'):
             source_ext = '.' + source_ext
 
+        # Validate source extension when filtering by extension
+        if not all_files_mode and not self._is_valid_extension(source_ext):
+            self.file_frame.set_label("Files to Rename")
+            self.update_preview()
+            return
+
         # Get files
         try:
             for entry in os.listdir(self.current_folder):
@@ -363,6 +374,7 @@ class FileRenamer(Gtk.Window):
         for src, dst in plan:
             if dst_counts[dst] > 1:
                 collisions[dst] = "duplicate target name"
+            # Don't flag as collision if the existing file is itself being renamed away
             elif dst != src and os.path.exists(dst) and dst not in src_set:
                 collisions[dst] = "file already exists"
         return collisions
@@ -372,8 +384,11 @@ class FileRenamer(Gtk.Window):
         self.preview_store.clear()
 
         series_name = self.series_entry.get_text().strip()
+        target_ext = self.target_ext_entry.get_text().strip()
+        if not target_ext.startswith('.'):
+            target_ext = '.' + target_ext
 
-        if not series_name or not self.files:
+        if not series_name or not self.files or not self._is_valid_extension(target_ext):
             self.rename_button.set_sensitive(False)
             return
 
@@ -508,6 +523,9 @@ class FileRenamer(Gtk.Window):
 
         for src, dst in plan:
             try:
+                if not os.path.exists(src):
+                    errors.append(f"{os.path.basename(src)}: source file no longer exists")
+                    continue
                 os.rename(src, dst)
                 self.last_rename_operation.append((src, dst))
                 success_count += 1
@@ -640,7 +658,7 @@ class FileRenamer(Gtk.Window):
                 with open(CONFIG_FILE, 'r') as f:
                     return json.load(f)
         except Exception as e:
-            print(f"Error loading settings: {e}")
+            self.settings_load_error = f"Error loading settings: {e}"
 
         return {
             "series_name": "",
@@ -662,6 +680,28 @@ class FileRenamer(Gtk.Window):
         except Exception as e:
             self.show_error(f"Error saving settings: {e}")
             return False
+
+    def _show_settings_load_warning(self):
+        """Show a warning dialog about corrupted settings file"""
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK,
+            text="Settings Could Not Be Loaded"
+        )
+        dialog.format_secondary_text(
+            f"Your settings file could not be read and defaults have been "
+            f"loaded.\n\n{self.settings_load_error}\n\n"
+            f"Settings file: {CONFIG_FILE}"
+        )
+        dialog.run()
+        dialog.destroy()
+        return False
+
+    def _is_valid_extension(self, ext):
+        """Check if a file extension is valid (not empty or only dots)"""
+        return ext.replace('.', '') != ''
 
     def show_error(self, message):
         """Show error dialog"""
