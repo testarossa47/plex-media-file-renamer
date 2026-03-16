@@ -46,6 +46,9 @@ class FileRenamer(Gtk.Window):
         # Undo history: list of tuples (old_path, new_path)
         self.last_rename_operation = []
 
+        # Track last toggled row for Shift+click range selection
+        self.last_toggled_row = None
+
         # Build UI
         self.build_ui()
 
@@ -230,9 +233,11 @@ class FileRenamer(Gtk.Window):
         self.file_tree_view.set_headers_visible(True)
         self.file_tree_view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
 
-        # Column: Checkbox
+        # Intercept clicks to handle Shift/Ctrl toggle on the checkbox column
+        self.file_tree_view.connect("button-press-event", self.on_file_list_button_press)
+
+        # Column: Checkbox (toggling is handled via button-press-event)
         toggle_renderer = Gtk.CellRendererToggle()
-        toggle_renderer.connect("toggled", self.on_file_toggled)
         toggle_col = Gtk.TreeViewColumn("", toggle_renderer, active=0)
         self.file_tree_view.append_column(toggle_col)
 
@@ -345,6 +350,7 @@ class FileRenamer(Gtk.Window):
 
         self.file_store.clear()
         self.files = []
+        self.last_toggled_row = None
 
         all_files_mode = self.all_files_check.get_active()
 
@@ -512,11 +518,46 @@ class FileRenamer(Gtk.Window):
             self.sort_files()
             self.load_files()
 
-    def on_file_toggled(self, renderer, path):
-        """Handle individual file checkbox toggle"""
-        self.file_store[path][0] = not self.file_store[path][0]
+    def on_file_list_button_press(self, tree_view, event):
+        """Handle clicks on the file list with Shift/Ctrl modifier support"""
+        if event.button != 1:
+            return False
+
+        # Determine which row and column was clicked
+        path_info = tree_view.get_path_at_pos(int(event.x), int(event.y))
+        if not path_info:
+            return False
+
+        path, column, cell_x, cell_y = path_info
+        row_idx = path.get_indices()[0]
+
+        # Only handle clicks on the checkbox column (first column)
+        columns = tree_view.get_columns()
+        if column != columns[0]:
+            return False
+
+        state = event.state
+        shift_held = bool(state & Gdk.ModifierType.SHIFT_MASK)
+        ctrl_held = bool(state & Gdk.ModifierType.CONTROL_MASK)
+
+        if shift_held and self.last_toggled_row is not None:
+            # Shift+click: set range to match the state of last_toggled_row
+            start = min(self.last_toggled_row, row_idx)
+            end = max(self.last_toggled_row, row_idx)
+            target_state = self.file_store[self.last_toggled_row][0]
+            for i in range(start, end + 1):
+                self.file_store[i][0] = target_state
+        elif ctrl_held:
+            # Ctrl+click: toggle without updating last_toggled_row anchor
+            self.file_store[row_idx][0] = not self.file_store[row_idx][0]
+        else:
+            # Plain click: toggle single row and set as anchor
+            self.file_store[row_idx][0] = not self.file_store[row_idx][0]
+            self.last_toggled_row = row_idx
+
         self._update_file_frame_label()
         self.update_preview()
+        return True
 
     def on_select_all(self, widget):
         """Select all files in the list"""
