@@ -65,6 +65,9 @@ class FileRenamer(Gtk.Window):
             Gtk.AccelFlags.VISIBLE
         )
 
+        # Defocus spin buttons when clicking empty window areas
+        self.connect("button-press-event", self.on_window_clicked)
+
         # Track window size changes for persistence
         self.connect("configure-event", self.on_window_configure)
 
@@ -329,6 +332,13 @@ class FileRenamer(Gtk.Window):
         style_context.add_provider_for_screen(
             screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
+
+    def on_window_clicked(self, widget, event):
+        """Force spin buttons to commit their value when clicking elsewhere"""
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.SpinButton):
+            focus.update()
+        return False
 
     def on_window_configure(self, widget, event):
         """Track window size changes for persistence"""
