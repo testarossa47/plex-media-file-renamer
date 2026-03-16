@@ -32,11 +32,24 @@ def set_app_files(app, file_list):
         app.file_store.append([True, os.path.basename(f), f])
 
 
+def suppress_warnings(app):
+    """Suppress warning dialogs during tests"""
+    app._show_settings_load_warning = lambda: False
+
+
 class TestIssue5CollisionComment(unittest.TestCase):
     """Issue #5 - Verify _detect_collisions logic with the documented edge case"""
 
     def setUp(self):
         self.app = FileRenamer()
+        process_gtk_events()
+        # Clear any auto-loaded user data from settings to prevent tests
+        # from operating on user's last_folder (e.g., Downloads)
+        self.app.current_folder = None
+        self.app.files = []
+        self.app.file_store.clear()
+        self.app.settings["last_folder"] = ""
+        suppress_warnings(self.app)
         process_gtk_events()
 
     def tearDown(self):
@@ -110,6 +123,13 @@ class TestIssue14SeasonZero(unittest.TestCase):
     def setUp(self):
         self.app = FileRenamer()
         process_gtk_events()
+        # Clear any auto-loaded user data from settings
+        self.app.current_folder = None
+        self.app.files = []
+        self.app.file_store.clear()
+        self.app.settings["last_folder"] = ""
+        suppress_warnings(self.app)
+        process_gtk_events()
 
     def tearDown(self):
         self.app.destroy()
@@ -136,7 +156,9 @@ class TestIssue14SeasonZero(unittest.TestCase):
             with open(test_file, 'w') as f:
                 f.write("test")
 
+            # Set to temp folder BEFORE creating test files to ensure isolation
             self.app.current_folder = tmpdir
+            self.app.settings["last_folder"] = tmpdir
             set_app_files(self.app, [test_file])
             self.app.series_entry.set_text("Specials")
             self.app.season_spin.set_value(0)
@@ -161,6 +183,13 @@ class TestIssue6PreflightCheck(unittest.TestCase):
 
     def setUp(self):
         self.app = FileRenamer()
+        process_gtk_events()
+        # Clear any auto-loaded user data from settings
+        self.app.current_folder = None
+        self.app.files = []
+        self.app.file_store.clear()
+        self.app.settings["last_folder"] = ""
+        suppress_warnings(self.app)
         process_gtk_events()
 
     def tearDown(self):
@@ -219,7 +248,9 @@ class TestIssue6PreflightCheck(unittest.TestCase):
             with open(test_file, 'w') as f:
                 f.write("test")
 
+            # Set to temp folder BEFORE creating test files to ensure isolation
             self.app.current_folder = tmpdir
+            self.app.settings["last_folder"] = tmpdir
             set_app_files(self.app, [test_file])
             self.app.series_entry.set_text("Show")
             self.app.season_spin.set_value(1)
@@ -253,6 +284,13 @@ class TestIssue8ExtensionValidation(unittest.TestCase):
 
     def setUp(self):
         self.app = FileRenamer()
+        process_gtk_events()
+        # Clear any auto-loaded user data from settings
+        self.app.current_folder = None
+        self.app.files = []
+        self.app.file_store.clear()
+        self.app.settings["last_folder"] = ""
+        suppress_warnings(self.app)
         process_gtk_events()
 
     def tearDown(self):
@@ -367,6 +405,8 @@ class TestIssue7CorruptedSettings(unittest.TestCase):
         """On successful settings load (or no file), error should be None"""
         app = FileRenamer()
         process_gtk_events()
+        suppress_warnings(app)
+        process_gtk_events()
         # If the real config file is fine (or doesn't exist), no error
         self.assertIsNone(app.settings_load_error)
         app.destroy()
@@ -412,6 +452,8 @@ class TestIssue7CorruptedSettings(unittest.TestCase):
         try:
             app = FileRenamer()
             process_gtk_events()
+            suppress_warnings(app)
+            process_gtk_events()
 
             self.assertIsNone(app.settings_load_error,
                               "Missing config file should not be an error")
@@ -426,6 +468,8 @@ class TestIssue7CorruptedSettings(unittest.TestCase):
     def test_show_settings_load_warning_method_exists(self):
         """The _show_settings_load_warning method should exist on the class"""
         app = FileRenamer()
+        process_gtk_events()
+        suppress_warnings(app)
         process_gtk_events()
         self.assertTrue(hasattr(app, '_show_settings_load_warning'))
         self.assertTrue(callable(app._show_settings_load_warning))
