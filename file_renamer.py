@@ -203,23 +203,48 @@ class FileRenamer(Gtk.Window):
 
     def create_file_list(self):
         """Create the file list view"""
+        file_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+
+        # Select All / Deselect All buttons
+        sel_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        sel_box.set_margin_start(3)
+        sel_box.set_margin_top(3)
+
+        select_all_btn = Gtk.Button(label="Select All")
+        select_all_btn.connect("clicked", self.on_select_all)
+        sel_box.pack_start(select_all_btn, False, False, 0)
+
+        deselect_all_btn = Gtk.Button(label="Deselect All")
+        deselect_all_btn.connect("clicked", self.on_deselect_all)
+        sel_box.pack_start(deselect_all_btn, False, False, 0)
+
+        file_box.pack_start(sel_box, False, False, 0)
+
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
 
-        # ListStore: filename, full_path
-        self.file_store = Gtk.ListStore(str, str)
+        # ListStore: selected, filename, full_path
+        self.file_store = Gtk.ListStore(bool, str, str)
 
-        tree_view = Gtk.TreeView(model=self.file_store)
-        tree_view.set_headers_visible(True)
+        self.file_tree_view = Gtk.TreeView(model=self.file_store)
+        self.file_tree_view.set_headers_visible(True)
+        self.file_tree_view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
+
+        # Column: Checkbox
+        toggle_renderer = Gtk.CellRendererToggle()
+        toggle_renderer.connect("toggled", self.on_file_toggled)
+        toggle_col = Gtk.TreeViewColumn("", toggle_renderer, active=0)
+        self.file_tree_view.append_column(toggle_col)
 
         # Column: Filename
         renderer = Gtk.CellRendererText()
-        column = Gtk.TreeViewColumn("Original Filename", renderer, text=0)
+        column = Gtk.TreeViewColumn("Original Filename", renderer, text=1)
         column.set_expand(True)
-        tree_view.append_column(column)
+        self.file_tree_view.append_column(column)
 
-        scrolled.add(tree_view)
-        return scrolled
+        scrolled.add(self.file_tree_view)
+        file_box.pack_start(scrolled, True, True, 0)
+        return file_box
 
     def create_preview_list(self):
         """Create the preview list view"""
@@ -349,11 +374,10 @@ class FileRenamer(Gtk.Window):
         # Sort files
         self.sort_files()
 
-        # Update file list and frame label
-        count = len(self.files)
-        self.file_frame.set_label(f"Files to Rename ({count} file{'s' if count != 1 else ''})")
+        # Update file list (all files selected by default)
         for file_path in self.files:
-            self.file_store.append([os.path.basename(file_path), file_path])
+            self.file_store.append([True, os.path.basename(file_path), file_path])
+        self._update_file_frame_label()
 
         # Update preview
         self.update_preview()
@@ -382,8 +406,23 @@ class FileRenamer(Gtk.Window):
         elif sort_by == "name":
             self.files.sort(key=lambda f: os.path.basename(f).lower())
 
+    def _get_selected_files(self):
+        """Return list of full paths for files with checkbox enabled"""
+        return [row[2] for row in self.file_store if row[0]]
+
+    def _update_file_frame_label(self):
+        """Update the file frame label with selected/total counts"""
+        total = len(self.file_store)
+        selected = sum(1 for row in self.file_store if row[0])
+        if total == 0:
+            self.file_frame.set_label("Files to Rename")
+        else:
+            self.file_frame.set_label(
+                f"Files to Rename ({selected} of {total} selected)"
+            )
+
     def _build_rename_plan(self):
-        """Build the rename plan: list of (src_path, dst_path)"""
+        """Build the rename plan for selected files only"""
         series_name = self.series_entry.get_text().strip()
         season = int(self.season_spin.get_value())
         start_episode = int(self.episode_spin.get_value())
@@ -391,8 +430,9 @@ class FileRenamer(Gtk.Window):
         if not target_ext.startswith('.'):
             target_ext = '.' + target_ext
 
+        selected_files = self._get_selected_files()
         plan = []
-        for idx, file_path in enumerate(self.files):
+        for idx, file_path in enumerate(selected_files):
             episode_num = start_episode + idx
             new_name = f"{series_name} - S{season:02d}E{episode_num:02d}{target_ext}"
             new_path = os.path.join(os.path.dirname(file_path), new_name)
@@ -430,7 +470,8 @@ class FileRenamer(Gtk.Window):
         if not target_ext.startswith('.'):
             target_ext = '.' + target_ext
 
-        if not series_name or not self.files or not self._is_valid_extension(target_ext):
+        selected_files = self._get_selected_files()
+        if not series_name or not selected_files or not self._is_valid_extension(target_ext):
             self.rename_button.set_sensitive(False)
             return
 
@@ -471,6 +512,26 @@ class FileRenamer(Gtk.Window):
             self.sort_files()
             self.load_files()
 
+    def on_file_toggled(self, renderer, path):
+        """Handle individual file checkbox toggle"""
+        self.file_store[path][0] = not self.file_store[path][0]
+        self._update_file_frame_label()
+        self.update_preview()
+
+    def on_select_all(self, widget):
+        """Select all files in the list"""
+        for row in self.file_store:
+            row[0] = True
+        self._update_file_frame_label()
+        self.update_preview()
+
+    def on_deselect_all(self, widget):
+        """Deselect all files in the list"""
+        for row in self.file_store:
+            row[0] = False
+        self._update_file_frame_label()
+        self.update_preview()
+
     def on_save_settings(self, widget):
         """Save current settings"""
         # Preserve window size already tracked by on_window_configure
@@ -506,8 +567,9 @@ class FileRenamer(Gtk.Window):
             buttons=Gtk.ButtonsType.YES_NO,
             text="Confirm Rename"
         )
+        selected_count = len(self._get_selected_files())
         dialog.format_secondary_text(
-            f"Are you sure you want to rename {len(self.files)} files?"
+            f"Are you sure you want to rename {selected_count} selected files?"
         )
 
         response = dialog.run()
