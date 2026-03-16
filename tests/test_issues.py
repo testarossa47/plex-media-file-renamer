@@ -24,6 +24,14 @@ def process_gtk_events():
         Gtk.main_iteration_do(False)
 
 
+def set_app_files(app, file_list):
+    """Set up files in both app.files and app.file_store (all selected)"""
+    app.files = list(file_list)
+    app.file_store.clear()
+    for f in file_list:
+        app.file_store.append([True, os.path.basename(f), f])
+
+
 class TestIssue5CollisionComment(unittest.TestCase):
     """Issue #5 - Verify _detect_collisions logic with the documented edge case"""
 
@@ -129,7 +137,7 @@ class TestIssue14SeasonZero(unittest.TestCase):
                 f.write("test")
 
             self.app.current_folder = tmpdir
-            self.app.files = [test_file]
+            set_app_files(self.app, [test_file])
             self.app.series_entry.set_text("Specials")
             self.app.season_spin.set_value(0)
             self.app.episode_spin.set_value(1)
@@ -171,7 +179,7 @@ class TestIssue6PreflightCheck(unittest.TestCase):
 
             # Set up the app
             self.app.current_folder = tmpdir
-            self.app.files = [file_a, file_b]
+            set_app_files(self.app, [file_a, file_b])
             self.app.series_entry.set_text("TestShow")
             self.app.season_spin.set_value(1)
             self.app.episode_spin.set_value(1)
@@ -212,7 +220,7 @@ class TestIssue6PreflightCheck(unittest.TestCase):
                 f.write("test")
 
             self.app.current_folder = tmpdir
-            self.app.files = [test_file]
+            set_app_files(self.app, [test_file])
             self.app.series_entry.set_text("Show")
             self.app.season_spin.set_value(1)
             self.app.episode_spin.set_value(1)
