@@ -22,7 +22,8 @@ class FileRenamer(Gtk.Window):
         "sort_by": "ctime_asc",
         "all_files": False,
         "window_width": 900,
-        "window_height": 600
+        "window_height": 600,
+        "last_folder": ""
     }
 
     def __init__(self):
@@ -74,16 +75,19 @@ class FileRenamer(Gtk.Window):
         if self.settings_load_error:
             GLib.idle_add(self._show_settings_load_warning)
 
+        # Restore last folder from settings and auto-load files
+        last_folder = self.settings.get("last_folder", "")
+        if last_folder and os.path.isdir(last_folder):
+            self.current_folder = last_folder
+            self.folder_entry.set_text(last_folder)
+            GLib.idle_add(self.load_files)
+
     def build_ui(self):
         """Build the main user interface"""
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.add(main_box)
 
-        # Top toolbar
-        toolbar = self.create_toolbar()
-        main_box.pack_start(toolbar, False, False, 0)
-
-        # Configuration panel
+        # Configuration panel (includes folder selection)
         config_panel = self.create_config_panel()
         main_box.pack_start(config_panel, False, False, 0)
 
@@ -111,86 +115,83 @@ class FileRenamer(Gtk.Window):
         action_box = self.create_action_buttons()
         main_box.pack_start(action_box, False, False, 0)
 
-    def create_toolbar(self):
-        """Create the top toolbar"""
-        toolbar_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-
-        # Folder selection
-        self.folder_button = Gtk.FileChooserButton(title="Select Folder")
-        self.folder_button.set_action(Gtk.FileChooserAction.SELECT_FOLDER)
-        self.folder_button.connect("file-set", self.on_folder_selected)
-        toolbar_box.pack_start(Gtk.Label(label="Folder:"), False, False, 0)
-        toolbar_box.pack_start(self.folder_button, True, True, 0)
-
-        return toolbar_box
-
     def create_config_panel(self):
-        """Create configuration panel"""
+        """Create configuration panel with folder and output settings"""
         grid = Gtk.Grid()
-        grid.set_column_spacing(10)
+        grid.set_column_spacing(8)
         grid.set_row_spacing(5)
         grid.set_margin_top(5)
         grid.set_margin_bottom(5)
 
-        row = 0
+        # --- Row 0: Folder ---
+        grid.attach(Gtk.Label(label="Folder:", xalign=1), 0, 0, 1, 1)
+        self.folder_entry = Gtk.Entry()
+        self.folder_entry.set_editable(False)
+        self.folder_entry.set_placeholder_text("No folder selected")
+        self.folder_entry.set_hexpand(True)
+        grid.attach(self.folder_entry, 1, 0, 6, 1)
 
-        # Series Name
-        grid.attach(Gtk.Label(label="Series Name:", xalign=1), 0, row, 1, 1)
+        browse_btn = Gtk.Button(label="Browse...")
+        browse_btn.connect("clicked", self.on_browse_clicked)
+        grid.attach(browse_btn, 7, 0, 1, 1)
+
+        # --- Row 1: Series Name, Season, Start Episode, Target Extension ---
+        grid.attach(Gtk.Label(label="Series Name:", xalign=1), 0, 1, 1, 1)
         self.series_entry = Gtk.Entry()
         self.series_entry.set_text(self.settings.get("series_name", ""))
         self.series_entry.set_placeholder_text("e.g., The Series")
+        self.series_entry.set_hexpand(True)
         self.series_entry.connect("changed", self.on_config_changed)
-        grid.attach(self.series_entry, 1, row, 1, 1)
+        grid.attach(self.series_entry, 1, 1, 1, 1)
 
-        # Season Number
-        grid.attach(Gtk.Label(label="Season:", xalign=1), 2, row, 1, 1)
+        grid.attach(Gtk.Label(label="Season:", xalign=1), 2, 1, 1, 1)
         season_adj = Gtk.Adjustment(value=self.settings.get("season", 1),
                                      lower=0, upper=99, step_increment=1)
         self.season_spin = Gtk.SpinButton(adjustment=season_adj, digits=0)
+        self.season_spin.set_width_chars(2)
+        self.season_spin.set_max_width_chars(3)
         self.season_spin.connect("value-changed", self.on_config_changed)
-        grid.attach(self.season_spin, 3, row, 1, 1)
+        grid.attach(self.season_spin, 3, 1, 1, 1)
 
-        # Episode Number
-        grid.attach(Gtk.Label(label="Start Episode:", xalign=1), 4, row, 1, 1)
+        grid.attach(Gtk.Label(label="Start Ep:", xalign=1), 4, 1, 1, 1)
         episode_adj = Gtk.Adjustment(value=self.settings.get("start_episode", 1),
                                        lower=1, upper=999, step_increment=1)
         self.episode_spin = Gtk.SpinButton(adjustment=episode_adj, digits=0)
+        self.episode_spin.set_width_chars(3)
+        self.episode_spin.set_max_width_chars(4)
         self.episode_spin.connect("value-changed", self.on_config_changed)
-        grid.attach(self.episode_spin, 5, row, 1, 1)
+        grid.attach(self.episode_spin, 5, 1, 1, 1)
 
-        row += 1
-
-        # Source Extension
-        grid.attach(Gtk.Label(label="Source Extension:", xalign=1), 0, row, 1, 1)
-        ext_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.source_ext_entry = Gtk.Entry()
-        self.source_ext_entry.set_text(self.settings.get("source_extension", ".ts"))
-        self.source_ext_entry.set_max_width_chars(10)
-        self.source_ext_entry.connect("changed", self.on_extension_changed)
-        ext_box.pack_start(self.source_ext_entry, False, False, 0)
-
-        # All files checkbox
-        self.all_files_check = Gtk.CheckButton(label="All extensions")
-        self.all_files_check.set_tooltip_text("Match files regardless of extension")
-        self.all_files_check.set_active(self.settings.get("all_files", False))
-        self.all_files_check.connect("toggled", self.on_all_files_toggled)
-        ext_box.pack_start(self.all_files_check, False, False, 0)
-
-        # Set initial state of source extension field based on "All files" checkbox
-        self.source_ext_entry.set_sensitive(not self.all_files_check.get_active())
-
-        grid.attach(ext_box, 1, row, 1, 1)
-
-        # Target Extension
-        grid.attach(Gtk.Label(label="Target Extension:", xalign=1), 2, row, 1, 1)
+        grid.attach(Gtk.Label(label="Target Ext:", xalign=1), 6, 1, 1, 1)
         self.target_ext_entry = Gtk.Entry()
         self.target_ext_entry.set_text(self.settings.get("target_extension", ".mp4"))
-        self.target_ext_entry.set_max_width_chars(10)
+        self.target_ext_entry.set_width_chars(5)
+        self.target_ext_entry.set_max_width_chars(6)
         self.target_ext_entry.connect("changed", self.on_config_changed)
-        grid.attach(self.target_ext_entry, 3, row, 1, 1)
+        grid.attach(self.target_ext_entry, 7, 1, 1, 1)
 
-        # Sort by
-        grid.attach(Gtk.Label(label="Sort by:", xalign=1), 4, row, 1, 1)
+        return grid
+
+    def create_file_list(self):
+        """Create the file list view"""
+        file_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+
+        # Toolbar: selection buttons (left) + source filter and sort (right)
+        toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        toolbar.set_margin_start(3)
+        toolbar.set_margin_end(3)
+        toolbar.set_margin_top(3)
+
+        # Left side: Select All / Deselect All
+        select_all_btn = Gtk.Button(label="Select All")
+        select_all_btn.connect("clicked", self.on_select_all)
+        toolbar.pack_start(select_all_btn, False, False, 0)
+
+        deselect_all_btn = Gtk.Button(label="Deselect All")
+        deselect_all_btn.connect("clicked", self.on_deselect_all)
+        toolbar.pack_start(deselect_all_btn, False, False, 0)
+
+        # Right side: Source Extension + Sort by (packed with pack_end, reversed)
         self.sort_combo = Gtk.ComboBoxText()
         self.sort_combo.append("ctime_asc", "Creation Date (Ascending)")
         self.sort_combo.append("ctime_desc", "Creation Date (Descending)")
@@ -200,28 +201,25 @@ class FileRenamer(Gtk.Window):
         self.sort_combo.append("name_desc", "Name (Z-A)")
         self.sort_combo.set_active_id(self.settings.get("sort_by", "ctime_asc"))
         self.sort_combo.connect("changed", self.on_sort_changed)
-        grid.attach(self.sort_combo, 5, row, 1, 1)
+        toolbar.pack_end(self.sort_combo, False, False, 0)
+        toolbar.pack_end(Gtk.Label(label="Sort by:"), False, False, 0)
 
-        return grid
+        self.all_files_check = Gtk.CheckButton(label="All ext")
+        self.all_files_check.set_tooltip_text("Match files regardless of extension")
+        self.all_files_check.set_active(self.settings.get("all_files", False))
+        self.all_files_check.connect("toggled", self.on_all_files_toggled)
+        toolbar.pack_end(self.all_files_check, False, False, 0)
 
-    def create_file_list(self):
-        """Create the file list view"""
-        file_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self.source_ext_entry = Gtk.Entry()
+        self.source_ext_entry.set_text(self.settings.get("source_extension", ".ts"))
+        self.source_ext_entry.set_width_chars(5)
+        self.source_ext_entry.set_max_width_chars(6)
+        self.source_ext_entry.connect("changed", self.on_extension_changed)
+        self.source_ext_entry.set_sensitive(not self.all_files_check.get_active())
+        toolbar.pack_end(self.source_ext_entry, False, False, 0)
+        toolbar.pack_end(Gtk.Label(label="Source Ext:"), False, False, 0)
 
-        # Select All / Deselect All buttons
-        sel_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        sel_box.set_margin_start(3)
-        sel_box.set_margin_top(3)
-
-        select_all_btn = Gtk.Button(label="Select All")
-        select_all_btn.connect("clicked", self.on_select_all)
-        sel_box.pack_start(select_all_btn, False, False, 0)
-
-        deselect_all_btn = Gtk.Button(label="Deselect All")
-        deselect_all_btn.connect("clicked", self.on_deselect_all)
-        sel_box.pack_start(deselect_all_btn, False, False, 0)
-
-        file_box.pack_start(sel_box, False, False, 0)
+        file_box.pack_start(toolbar, False, False, 0)
 
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
@@ -262,10 +260,12 @@ class FileRenamer(Gtk.Window):
         tree_view = Gtk.TreeView(model=self.preview_store)
         tree_view.set_headers_visible(True)
 
-        # Original filename
+        # Original filename — auto-sized to content, manually resizable
         renderer = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("Original", renderer, text=0)
-        column.set_expand(True)
+        column.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
+        column.set_resizable(True)
+        column.set_expand(False)
         tree_view.append_column(column)
 
         # Arrow
@@ -273,10 +273,12 @@ class FileRenamer(Gtk.Window):
         column = Gtk.TreeViewColumn("", renderer, text=1)
         tree_view.append_column(column)
 
-        # New filename - foreground color bound to column 4
+        # New filename — expands to fill remaining space, manually resizable
         renderer = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn("New Name", renderer, text=2, foreground=4)
+        column.set_resizable(True)
         column.set_expand(True)
+        column.set_min_width(200)
         tree_view.append_column(column)
 
         scrolled.add(tree_view)
@@ -338,10 +340,28 @@ class FileRenamer(Gtk.Window):
         self.save_settings()
         return False
 
-    def on_folder_selected(self, widget):
-        """Handle folder selection"""
-        self.current_folder = widget.get_filename()
-        self.load_files()
+    def on_browse_clicked(self, widget):
+        """Open a folder chooser dialog"""
+        dialog = Gtk.FileChooserDialog(
+            title="Select Folder",
+            parent=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER
+        )
+        dialog.add_button(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+        dialog.add_button(Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+
+        # Start at the current or last-used folder
+        if self.current_folder and os.path.isdir(self.current_folder):
+            dialog.set_current_folder(self.current_folder)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            self.current_folder = dialog.get_filename()
+            self.folder_entry.set_text(self.current_folder)
+            self.settings["last_folder"] = self.current_folder
+            self.load_files()
+        dialog.destroy()
 
     def load_files(self):
         """Load files from selected folder"""
@@ -587,7 +607,8 @@ class FileRenamer(Gtk.Window):
             "sort_by": self.sort_combo.get_active_id(),
             "all_files": self.all_files_check.get_active(),
             "window_width": width,
-            "window_height": height
+            "window_height": height,
+            "last_folder": self.current_folder or ""
         }
 
         if self.save_settings():
