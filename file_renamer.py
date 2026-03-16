@@ -449,10 +449,10 @@ class FileRenamer(Gtk.Window):
 
     def _build_rename_plan(self):
         """Build the rename plan for selected files only"""
-        series_name = self.series_entry.get_text().strip()
+        series_name = self._sanitize_filename_part(self.series_entry.get_text())
         season = int(self.season_spin.get_value())
         start_episode = int(self.episode_spin.get_value())
-        target_ext = self.target_ext_entry.get_text().strip()
+        target_ext = self._sanitize_filename_part(self.target_ext_entry.get_text())
         if not target_ext.startswith('.'):
             target_ext = '.' + target_ext
 
@@ -491,8 +491,8 @@ class FileRenamer(Gtk.Window):
         """Update the preview list"""
         self.preview_store.clear()
 
-        series_name = self.series_entry.get_text().strip()
-        target_ext = self.target_ext_entry.get_text().strip()
+        series_name = self._sanitize_filename_part(self.series_entry.get_text())
+        target_ext = self._sanitize_filename_part(self.target_ext_entry.get_text())
         if not target_ext.startswith('.'):
             target_ext = '.' + target_ext
 
@@ -810,6 +810,13 @@ class FileRenamer(Gtk.Window):
         dialog.run()
         dialog.destroy()
         return False
+
+    def _sanitize_filename_part(self, text):
+        """Remove path separators and traversal components from a filename part"""
+        text = text.replace('/', '').replace('\\', '')
+        while '..' in text:
+            text = text.replace('..', '')
+        return text.strip()
 
     def _is_valid_extension(self, ext):
         """Check if a file extension is valid (not empty or only dots)"""

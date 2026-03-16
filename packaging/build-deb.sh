@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────
 PKG_NAME="plex-file-renamer"
-PKG_VERSION="2.0.0"
+PKG_VERSION="2.0.1"
 PKG_ARCH="all"
 MAINTAINER="testarossa47 <testarossa47@users.noreply.github.com>"
 DESCRIPTION="GUI tool for renaming video files for Plex Media Server"
