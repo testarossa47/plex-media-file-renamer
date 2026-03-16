@@ -2,6 +2,8 @@
 
 A GUI tool for Linux to rename video files for Plex Media Server compatibility. Styled to match Linux Mint's Nemo file manager.
 
+![Plex File Renamer Screenshot](Screenshot.png)
+
 ## Features
 
 - **Nemo-style GUI** - Integrates seamlessly with Linux Mint's look and feel
