@@ -13,14 +13,31 @@ import json
 CONFIG_FILE = os.path.expanduser("~/.config/plex-file-renamer/settings.json")
 
 class FileRenamer(Gtk.Window):
+    DEFAULT_SETTINGS = {
+        "series_name": "",
+        "season": 1,
+        "start_episode": 1,
+        "source_extension": ".ts",
+        "target_extension": ".mp4",
+        "sort_by": "ctime_asc",
+        "all_files": False,
+        "window_width": 900,
+        "window_height": 600
+    }
+
     def __init__(self):
         super().__init__(title="Plex File Renamer")
-        self.set_default_size(900, 600)
         self.set_border_width(10)
 
         # Load settings (sets self.settings_load_error if config is corrupted)
         self.settings_load_error = None
         self.settings = self.load_settings()
+
+        # Restore window size from settings
+        self.set_default_size(
+            self.settings.get("window_width", 900),
+            self.settings.get("window_height", 600)
+        )
 
         # Current state
         self.current_folder = None
@@ -34,6 +51,21 @@ class FileRenamer(Gtk.Window):
 
         # Apply Nemo-like styling
         self.apply_styling()
+
+        # Keyboard shortcuts
+        accel_group = Gtk.AccelGroup()
+        self.add_accel_group(accel_group)
+        self.rename_button.add_accelerator(
+            "clicked", accel_group,
+            Gdk.keyval_from_name("r"), Gdk.ModifierType.CONTROL_MASK,
+            Gtk.AccelFlags.VISIBLE
+        )
+
+        # Track window size changes for persistence
+        self.connect("configure-event", self.on_window_configure)
+
+        # Save window size on close
+        self.connect("delete-event", self.on_window_delete)
 
         # Show warning after UI is ready if settings failed to load
         if self.settings_load_error:
@@ -240,7 +272,7 @@ class FileRenamer(Gtk.Window):
         # Rename button
         self.rename_button = Gtk.Button(label="Rename Files")
         self.rename_button.set_sensitive(False)
-        self.rename_button.set_tooltip_text("Enter a series name and load files to enable renaming")
+        self.rename_button.set_tooltip_text("Rename files (Ctrl+R)")
         self.rename_button.get_style_context().add_class("suggested-action")
         self.rename_button.connect("clicked", self.on_rename_clicked)
         button_box.pack_start(self.rename_button, False, False, 0)
@@ -265,6 +297,16 @@ class FileRenamer(Gtk.Window):
         style_context.add_provider_for_screen(
             screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
+
+    def on_window_configure(self, widget, event):
+        """Track window size changes for persistence"""
+        self.settings["window_width"] = event.width
+        self.settings["window_height"] = event.height
+
+    def on_window_delete(self, widget, event):
+        """Save window size on close"""
+        self.save_settings()
+        return False
 
     def on_folder_selected(self, widget):
         """Handle folder selection"""
@@ -431,6 +473,9 @@ class FileRenamer(Gtk.Window):
 
     def on_save_settings(self, widget):
         """Save current settings"""
+        # Preserve window size already tracked by on_window_configure
+        width = self.settings.get("window_width", 900)
+        height = self.settings.get("window_height", 600)
         self.settings = {
             "series_name": self.series_entry.get_text(),
             "season": int(self.season_spin.get_value()),
@@ -438,20 +483,18 @@ class FileRenamer(Gtk.Window):
             "source_extension": self.source_ext_entry.get_text(),
             "target_extension": self.target_ext_entry.get_text(),
             "sort_by": self.sort_combo.get_active_id(),
-            "all_files": self.all_files_check.get_active()
+            "all_files": self.all_files_check.get_active(),
+            "window_width": width,
+            "window_height": height
         }
 
         if self.save_settings():
-            dialog = Gtk.MessageDialog(
-                transient_for=self,
-                flags=0,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Settings Saved"
+            self._show_result_dialog(
+                "Settings Saved",
+                "Your default settings have been saved.",
+                "Settings Error",
+                []
             )
-            dialog.format_secondary_text("Your default settings have been saved.")
-            dialog.run()
-            dialog.destroy()
 
     def on_rename_clicked(self, widget):
         """Handle rename button click"""
@@ -537,36 +580,12 @@ class FileRenamer(Gtk.Window):
             self.undo_button.set_sensitive(True)
 
         # Show results
-        if errors:
-            error_text = "\n".join(errors[:5])
-            if len(errors) > 5:
-                error_text += f"\n... and {len(errors) - 5} more errors"
-
-            dialog = Gtk.MessageDialog(
-                transient_for=self,
-                flags=0,
-                message_type=Gtk.MessageType.WARNING,
-                buttons=Gtk.ButtonsType.OK,
-                text="Rename Completed with Errors"
-            )
-            dialog.format_secondary_text(
-                f"Successfully renamed {success_count} files.\n\nErrors:\n{error_text}"
-            )
-            dialog.run()
-            dialog.destroy()
-        else:
-            dialog = Gtk.MessageDialog(
-                transient_for=self,
-                flags=0,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Rename Successful"
-            )
-            dialog.format_secondary_text(
-                f"Successfully renamed {success_count} files."
-            )
-            dialog.run()
-            dialog.destroy()
+        self._show_result_dialog(
+            "Rename Successful",
+            f"Successfully renamed {success_count} files.",
+            "Rename Completed with Errors",
+            errors
+        )
 
         # Reload files
         self.load_files()
@@ -617,36 +636,12 @@ class FileRenamer(Gtk.Window):
         self.undo_button.set_sensitive(False)
 
         # Show results
-        if errors:
-            error_text = "\n".join(errors[:5])
-            if len(errors) > 5:
-                error_text += f"\n... and {len(errors) - 5} more errors"
-
-            dialog = Gtk.MessageDialog(
-                transient_for=self,
-                flags=0,
-                message_type=Gtk.MessageType.WARNING,
-                buttons=Gtk.ButtonsType.OK,
-                text="Undo Completed with Errors"
-            )
-            dialog.format_secondary_text(
-                f"Successfully restored {success_count} files.\n\nErrors:\n{error_text}"
-            )
-            dialog.run()
-            dialog.destroy()
-        else:
-            dialog = Gtk.MessageDialog(
-                transient_for=self,
-                flags=0,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Undo Successful"
-            )
-            dialog.format_secondary_text(
-                f"Successfully restored {success_count} files to their original names."
-            )
-            dialog.run()
-            dialog.destroy()
+        self._show_result_dialog(
+            "Undo Successful",
+            f"Successfully restored {success_count} files to their original names.",
+            "Undo Completed with Errors",
+            errors
+        )
 
         # Reload files
         self.load_files()
@@ -656,19 +651,12 @@ class FileRenamer(Gtk.Window):
         try:
             if os.path.exists(CONFIG_FILE):
                 with open(CONFIG_FILE, 'r') as f:
-                    return json.load(f)
+                    loaded = json.load(f)
+                    return {**self.DEFAULT_SETTINGS, **loaded}
         except Exception as e:
             self.settings_load_error = f"Error loading settings: {e}"
 
-        return {
-            "series_name": "",
-            "season": 1,
-            "start_episode": 1,
-            "source_extension": ".ts",
-            "target_extension": ".mp4",
-            "sort_by": "ctime_asc",
-            "all_files": False
-        }
+        return dict(self.DEFAULT_SETTINGS)
 
     def save_settings(self):
         """Save settings to config file"""
@@ -702,6 +690,38 @@ class FileRenamer(Gtk.Window):
     def _is_valid_extension(self, ext):
         """Check if a file extension is valid (not empty or only dots)"""
         return ext.replace('.', '') != ''
+
+    def _show_result_dialog(self, title, success_msg, error_title, errors):
+        """Show a result dialog with optional error details.
+
+        Returns None; always shows an OK dialog then destroys it.
+        """
+        if errors:
+            error_text = "\n".join(errors[:5])
+            if len(errors) > 5:
+                error_text += f"\n... and {len(errors) - 5} more errors"
+
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text=error_title
+            )
+            dialog.format_secondary_text(
+                f"{success_msg}\n\nErrors:\n{error_text}"
+            )
+        else:
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text=title
+            )
+            dialog.format_secondary_text(success_msg)
+        dialog.run()
+        dialog.destroy()
 
     def show_error(self, message):
         """Show error dialog"""
